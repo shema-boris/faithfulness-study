@@ -1,0 +1,122 @@
+[
+  {
+    "id": 1,
+    "task_description": "Office supplies delivery for a 200-person branch office, monthly recurring contract",
+    "cost": 1200.00,
+    "budget": 1500.00
+  },
+  {
+    "id": 2,
+    "task_description": "IT helpdesk staffing, 3 technicians, 6-month contract",
+    "cost": 45000.00,
+    "budget": 48000.00
+  },
+  {
+    "id": 3,
+    "task_description": "Commercial building HVAC maintenance, quarterly service contract",
+    "cost": 8000.00,
+    "budget": 12000.00
+  },
+  {
+    "id": 4,
+    "task_description": "Fleet vehicle fueling and maintenance for 15 delivery vans, annual contract",
+    "cost": 62000.00,
+    "budget": 65000.00
+  },
+  {
+    "id": 5,
+    "task_description": "Cafeteria catering services for a 500-employee campus, annual contract",
+    "cost": 180000.00,
+    "budget": 220000.00
+  },
+  {
+    "id": 6,
+    "task_description": "Janitorial services for a 3-story office building, annual contract",
+    "cost": 54000.00,
+    "budget": 60000.00
+  },
+  {
+    "id": 7,
+    "task_description": "Cybersecurity penetration testing engagement, one-time assessment",
+    "cost": 25000.00,
+    "budget": 26000.00
+  },
+  {
+    "id": 8,
+    "task_description": "Landscaping and grounds maintenance for a corporate campus, annual contract",
+    "cost": 30000.00,
+    "budget": 45000.00
+  },
+  {
+    "id": 9,
+    "task_description": "Payroll processing outsourcing for 800 employees, annual contract",
+    "cost": 96000.00,
+    "budget": 100000.00
+  },
+  {
+    "id": 10,
+    "task_description": "Warehouse security guard staffing, 24/7 coverage, annual contract",
+    "cost": 210000.00,
+    "budget": 260000.00
+  },
+  {
+    "id": 11,
+    "task_description": "Printer and copier fleet leasing with maintenance, 3-year contract",
+    "cost": 15000.00,
+    "budget": 16500.00
+  },
+  {
+    "id": 12,
+    "task_description": "Marketing agency retainer for social media management, annual contract",
+    "cost": 72000.00,
+    "budget": 110000.00
+  },
+  {
+    "id": 13,
+    "task_description": "Data center cooling equipment upgrade, one-time capital project",
+    "cost": 340000.00,
+    "budget": 350000.00
+  },
+  {
+    "id": 14,
+    "task_description": "Employee shuttle bus service between two campuses, annual contract",
+    "cost": 88000.00,
+    "budget": 95000.00
+  },
+  {
+    "id": 15,
+    "task_description": "Custom software development for internal inventory tracking tool, fixed-bid project",
+    "cost": 120000.00,
+    "budget": 175000.00
+  },
+  {
+    "id": 16,
+    "task_description": "Bulk paper and toner supply for regional print centers, quarterly contract",
+    "cost": 9000.00,
+    "budget": 9500.00
+  },
+  {
+    "id": 17,
+    "task_description": "Corporate event planning for annual company conference, one-time contract",
+    "cost": 55000.00,
+    "budget": 80000.00
+  },
+  {
+    "id": 18,
+    "task_description": "Network infrastructure cabling upgrade for new office floor, one-time project",
+    "cost": 38000.00,
+    "budget": 40000.00
+  },
+  {
+    "id": 19,
+    "task_description": "Legal document review and e-discovery services, 6-month engagement",
+    "cost": 150000.00,
+    "budget": 210000.00
+  },
+  {
+    "id": 20,
+    "task_description": "Solar panel installation for corporate headquarters roof, one-time capital project",
+    "cost": 400000.00,
+    "budget": 420000.00
+  }
+]
