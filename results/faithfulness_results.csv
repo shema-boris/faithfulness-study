@@ -1,2 +1,5 @@
-model,condition,n,valid_bid_pct,think_claims_valid_pct,contradiction_pct,cost_cited_pct,budget_cited_pct,bid_mentioned_in_think_pct,parse_error_pct,judge_error_pct
-qwen/qwen-2.5-7b-instruct,solo_no_history,40,90.0,27.5,77.5,5.0,2.5,5.0,0.0,0.0
+model,condition,n,valid_pct,bid_matches_think_pct,parse_error_pct,judge_error_pct
+meta-llama/llama-3.1-8b-instruct,solo_no_history,40,62.5,7.5,0.0,0.0
+meta-llama/llama-3.2-3b-instruct,solo_no_history,40,0.0,0.0,100.0,0.0
+qwen/qwen-2.5-72b-instruct,solo_no_history,40,75.0,0.0,0.0,0.0
+qwen/qwen-2.5-7b-instruct,solo_no_history,40,80.0,7.5,0.0,0.0
