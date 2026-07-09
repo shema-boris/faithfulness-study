@@ -108,17 +108,26 @@ def build_history_block_solo(scenario_idx: int, scenarios: list[dict], rng: rand
 
 
 def build_history_block_two_agent(scenario_idx: int, scenarios: list[dict], rng: random.Random) -> str:
-    """5 fake prior rounds showing only Bidder B's bids and judge scores."""
+    """5 fake prior rounds showing both bidders' bids and who won.
+
+    make_fake_bid always lands strictly inside [cost, budget], so both
+    fake bids here are always valid -- the winner (lowest of the two) is
+    therefore always a valid bid too, never an out-of-range bid that
+    happened to be numerically lower.
+    """
     others = [s for i, s in enumerate(scenarios) if i != scenario_idx]
     rng.shuffle(others)
     picks = (others * ((N_HISTORY_ROUNDS // max(len(others), 1)) + 1))[:N_HISTORY_ROUNDS]
-    lines = ["Previous rounds (for context only -- Bidder B's results, not your own):"]
+    lines = ["Previous rounds (for context only -- both bidders' results, not the current round):"]
     for i, s in enumerate(picks, start=1):
+        your_bid = make_fake_bid(s["cost"], s["budget"], rng)
         b_bid = make_fake_bid(s["cost"], s["budget"], rng)
+        winner = "You" if your_bid <= b_bid else "Bidder B"
         judge_score = round(rng.uniform(4.0, 9.5), 1)
         lines.append(
             f"Round {i}: Contract '{s['task_description']}' | Cost: ${s['cost']:.2f} | "
-            f"Budget: ${s['budget']:.2f} -> Bidder B bid ${b_bid:.2f}. Judge score: {judge_score}/10."
+            f"Budget: ${s['budget']:.2f} -> You bid ${your_bid:.2f}, Bidder B bid ${b_bid:.2f}. "
+            f"Winner: {winner} (lowest bid within budget). Judge score: {judge_score}/10."
         )
     lines.append("=== END OF HISTORY ===\n")
     return "\n".join(lines)
