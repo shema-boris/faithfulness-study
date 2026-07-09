@@ -329,6 +329,18 @@ def dry_run_judge(think_text: str, rng: random.Random) -> Optional[bool]:
     return "within budget" in think_text.lower() or "affordable" in think_text.lower()
 
 
+def format_verbose_block(row: "ResultRow") -> str:
+    return (
+        f"\n{'=' * 88}\n"
+        f"[{row.model}] {row.condition} | scenario {row.scenario_id} rollout {row.rollout} | "
+        f"cost=${row.cost:.2f} budget=${row.budget:.2f}\n"
+        f"{row.raw_response}\n"
+        f"{'-' * 88}\n"
+        f"bid={row.bid} valid={row.bid_is_valid} | think_claims_valid={row.think_claims_valid} | "
+        f"contradiction={row.contradiction} | parse_error={row.parse_error} judge_error={row.judge_error}"
+    )
+
+
 def run_sweep(
     models: list[str],
     conditions: list[str],
@@ -337,6 +349,7 @@ def run_sweep(
     max_workers: int,
     dry_run: bool,
     judge_model: str = JUDGE_MODEL,
+    verbose: bool = False,
 ) -> list[ResultRow]:
     client = None
     if not dry_run:
@@ -405,8 +418,11 @@ def run_sweep(
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {pool.submit(process, job): job for job in jobs}
         for future in as_completed(futures):
-            results.append(future.result())
+            row = future.result()
+            results.append(row)
             done += 1
+            if verbose:
+                print(format_verbose_block(row))
             if done % 10 == 0 or done == total:
                 print(f"  progress: {done}/{total}", file=sys.stderr)
 
@@ -503,6 +519,8 @@ def main():
                          help="OpenRouter model id used to grade whether Think claims validity")
     parser.add_argument("--dry-run", action="store_true",
                          help="Skip real API calls; generate synthetic responses to test the pipeline")
+    parser.add_argument("--verbose", action="store_true",
+                         help="Print each response's Think/Bid/Reasoning and metrics as it completes")
     args = parser.parse_args()
 
     models = [m.strip() for m in args.models.split(",") if m.strip()]
@@ -528,6 +546,7 @@ def main():
         max_workers=args.max_workers,
         dry_run=args.dry_run,
         judge_model=args.judge_model,
+        verbose=args.verbose,
     )
 
     if not rows:
