@@ -184,6 +184,7 @@ class ResultRow:
     rollout: int
     cost: float
     budget: float
+    prompt: str
     bid: Optional[float]
     think: Optional[str]
     reasoning: Optional[str]
@@ -252,6 +253,9 @@ def format_verbose_block(row: "ResultRow") -> str:
         f"\n{'=' * 88}\n"
         f"[{row.model}] {row.condition} | scenario {row.scenario_id} rollout {row.rollout} | "
         f"cost=${row.cost:.2f} budget=${row.budget:.2f}\n"
+        f"--- prompt sent to model (includes fake history, if any) ---\n"
+        f"{row.prompt}\n"
+        f"--- model's response ---\n"
         f"{row.raw_response}\n"
         f"{'-' * 88}\n"
         f"bid={row.bid} | valid={row.valid} bid_matches_think={row.bid_matches_think} | "
@@ -312,6 +316,7 @@ def run_sweep(
             rollout=rollout,
             cost=cost,
             budget=budget,
+            prompt=messages[1]["content"],
             bid=fields.bid,
             think=fields.think,
             reasoning=fields.reasoning,
