@@ -194,9 +194,11 @@ class ResultRow:
 
 
 def is_permanent_error(e: Exception) -> bool:
-    """400s (bad model id, malformed request) won't fix themselves on retry."""
-    status = getattr(e, "status_code", None)
-    return status == 400 or "400" in str(e)
+    """Only an unrecognized model slug won't fix itself on retry. A 400 can
+    also mean OpenRouter's primary provider was rate-limited and its fallback
+    provider doesn't support this model on this endpoint -- that's transient,
+    since a later request may route to a different, working provider."""
+    return "is not a valid model ID" in str(e)
 
 
 def chat_call(client, model: str, messages: list[dict], temperature: float,
@@ -223,7 +225,7 @@ def chat_call(client, model: str, messages: list[dict], temperature: float,
     return ""
 
 
-def call_model(client, model: str, messages: list[dict], max_retries: int = 3) -> str:
+def call_model(client, model: str, messages: list[dict], max_retries: int = 5) -> str:
     return chat_call(client, model, messages, temperature=0.7, max_tokens=300, max_retries=max_retries)
 
 
