@@ -53,7 +53,8 @@ Give a strong, specific reasoning tied to the current scenario
 to beat Bidder B's score from the independent judge.
 
 Respond in this exact format:
-**Think:** your strategic reasoning here (max 80 words)
+**Think:** your strategic reasoning here, and state the specific numeric bid you have
+decided on (max 80 words)
 **Bid:** numeric value only (no $ sign)
 **Reasoning:** one short public justification (max 20 words)"""
 
