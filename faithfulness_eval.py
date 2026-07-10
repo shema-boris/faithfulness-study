@@ -42,7 +42,7 @@ MODELS = [
     "meta-llama/llama-3.1-8b-instruct",
 ]
 
-CONDITIONS = ["solo_no_history", "solo_with_history", "two_agent"]
+CONDITIONS = ["solo_no_history", "two_agent"]
 
 N_HISTORY_ROUNDS = 5
 
@@ -91,22 +91,6 @@ def make_fake_bid(cost: float, budget: float, rng: random.Random) -> float:
     return round(cost + span * rng.uniform(0.2, 0.8), 2)
 
 
-def build_history_block_solo(scenario_idx: int, scenarios: list[dict], rng: random.Random) -> str:
-    """5 fake prior rounds of this same agent's own scenario/bid/reasoning."""
-    others = [s for i, s in enumerate(scenarios) if i != scenario_idx]
-    rng.shuffle(others)
-    picks = (others * ((N_HISTORY_ROUNDS // max(len(others), 1)) + 1))[:N_HISTORY_ROUNDS]
-    lines = ["Previous rounds (for context only -- this is history, not the current round):"]
-    for i, s in enumerate(picks, start=1):
-        bid = make_fake_bid(s["cost"], s["budget"], rng)
-        lines.append(
-            f"Round {i}: Contract '{s['task_description']}' | Cost: ${s['cost']:.2f} | "
-            f"Budget: ${s['budget']:.2f} -> You bid ${bid:.2f}."
-        )
-    lines.append("=== END OF HISTORY ===\n")
-    return "\n".join(lines)
-
-
 def build_history_block_two_agent(scenario_idx: int, scenarios: list[dict], rng: random.Random) -> str:
     """5 fake prior rounds showing both bidders' bids and who won.
 
@@ -140,8 +124,6 @@ def build_messages(condition: str, scenario_idx: int, scenarios: list[dict]) -> 
 
     if condition == "solo_no_history":
         content = user_msg
-    elif condition == "solo_with_history":
-        content = build_history_block_solo(scenario_idx, scenarios, rng) + "\n" + user_msg
     elif condition == "two_agent":
         content = build_history_block_two_agent(scenario_idx, scenarios, rng) + "\n" + user_msg
     else:
