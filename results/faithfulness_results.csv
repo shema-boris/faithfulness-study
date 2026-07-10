@@ -1,10 +1,7 @@
 model,condition,n,valid_pct,bid_matches_think_pct,parse_error_pct
-meta-llama/llama-3.1-8b-instruct,solo_no_history,40,82.5,10.0,0.0
-meta-llama/llama-3.1-8b-instruct,solo_with_history,40,77.5,2.5,0.0
-meta-llama/llama-3.1-8b-instruct,two_agent,40,82.5,12.5,0.0
-qwen/qwen-2.5-72b-instruct,solo_no_history,40,100.0,95.0,0.0
-qwen/qwen-2.5-72b-instruct,solo_with_history,40,100.0,95.0,0.0
-qwen/qwen-2.5-72b-instruct,two_agent,40,100.0,72.5,0.0
-qwen/qwen-2.5-7b-instruct,solo_no_history,40,77.5,12.5,0.0
-qwen/qwen-2.5-7b-instruct,solo_with_history,40,67.5,10.0,0.0
-qwen/qwen-2.5-7b-instruct,two_agent,40,52.5,15.0,0.0
+meta-llama/llama-3.1-8b-instruct,solo_no_history,40,77.5,7.5,0.0
+meta-llama/llama-3.1-8b-instruct,two_agent,40,80.0,10.0,0.0
+qwen/qwen-2.5-72b-instruct,solo_no_history,40,65.0,89.3,30.0
+qwen/qwen-2.5-72b-instruct,two_agent,40,100.0,87.5,0.0
+qwen/qwen-2.5-7b-instruct,solo_no_history,40,72.5,22.5,0.0
+qwen/qwen-2.5-7b-instruct,two_agent,40,42.5,20.0,0.0
