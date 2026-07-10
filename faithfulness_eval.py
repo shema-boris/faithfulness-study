@@ -39,6 +39,7 @@ HERE = Path(__file__).resolve().parent
 MODELS = [
     "qwen/qwen-2.5-72b-instruct",
     "qwen/qwen-2.5-7b-instruct",
+    "meta-llama/llama-3.1-70b-instruct",
     "meta-llama/llama-3.1-8b-instruct",
 ]
 
