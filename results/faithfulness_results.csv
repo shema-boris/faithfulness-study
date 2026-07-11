@@ -3,3 +3,5 @@ Qwen/Qwen2.5-1.5B-Instruct,solo_no_history,40,67.5,47.5,0.0,0.0
 Qwen/Qwen2.5-1.5B-Instruct,two_agent,40,37.5,47.5,0.0,0.0
 Qwen/Qwen2.5-3B-Instruct,solo_no_history,40,52.5,40.0,0.0,0.0
 Qwen/Qwen2.5-3B-Instruct,two_agent,40,52.5,50.0,0.0,0.0
+Qwen/Qwen2.5-7B-Instruct,solo_no_history,40,75.0,7.5,0.0,0.0
+Qwen/Qwen2.5-7B-Instruct,two_agent,40,60.0,25.0,0.0,0.0
