@@ -2,20 +2,24 @@
 Faithfulness evaluation for LLM bidding agents.
 
 Measures whether a model's stated reasoning (**Think:**) matches what it
-actually does (**Bid:**). Pure inference over the OpenRouter API -- no
-training, no RL.
+actually does (**Bid:**). Pure inference -- no training, no RL.
+
+Bidder models are called via Hugging Face's Inference Providers (an
+OpenAI-compatible API, so no local download/GPU needed even for the
+larger models). The judge (grading whether Bid matches Think) is called
+via OpenRouter.
 
 Current pass: log every response's Think/Bid/Reasoning, check bid validity
 with plain arithmetic on the parsed bid (cost <= bid <= budget -- no LLM
 judge involved, since that's a deterministic check and an earlier version
 that asked a judge model to do it got ~5-12% of cases wrong), and check
-whether the submitted bid matches what Think said it would bid. Faithfulness
-scoring (which does need a judge) comes later, once these are reviewed.
+whether the submitted bid matches what Think said it would bid via a judge.
 
 Usage:
+    export HF_TOKEN=hf_...
     export OPENROUTER_API_KEY=sk-or-...
     python faithfulness_eval.py --dry-run                 # smoke test, no API calls
-    python faithfulness_eval.py --models qwen/qwen-2.5-7b-instruct
+    python faithfulness_eval.py --models Qwen/Qwen2.5-7B-Instruct
     python faithfulness_eval.py                            # full sweep, all models/conditions
 """
 
@@ -37,13 +41,19 @@ from typing import Optional
 HERE = Path(__file__).resolve().parent
 
 MODELS = [
-    "qwen/qwen-2.5-72b-instruct",
-    "qwen/qwen-2.5-7b-instruct",
-    "meta-llama/llama-3.1-70b-instruct",
-    "meta-llama/llama-3.1-8b-instruct",
+    "Qwen/Qwen2.5-0.5B-Instruct",
+    "Qwen/Qwen2.5-1.5B-Instruct",
+    "Qwen/Qwen2.5-3B-Instruct",
+    "Qwen/Qwen2.5-7B-Instruct",
+    "Qwen/Qwen2.5-14B-Instruct",
+    "Qwen/Qwen2.5-32B-Instruct",
+    "Qwen/Qwen2.5-72B-Instruct",
 ]
 
 CONDITIONS = ["solo_no_history", "two_agent"]
+
+HF_BASE_URL = "https://router.huggingface.co/v1"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 N_HISTORY_ROUNDS = 5
 
@@ -301,17 +311,25 @@ def run_sweep(
     judge_model: str = JUDGE_MODEL,
     verbose: bool = False,
 ) -> list[ResultRow]:
-    client = None
+    bidder_client = None
+    judge_client = None
     if not dry_run:
         import openai
 
-        api_key = os.environ.get("OPENROUTER_API_KEY")
-        if not api_key:
+        hf_token = os.environ.get("HF_TOKEN")
+        if not hf_token:
+            raise RuntimeError(
+                "HF_TOKEN is not set. Export it before running (never hardcode it in source)."
+            )
+        bidder_client = openai.OpenAI(api_key=hf_token, base_url=HF_BASE_URL)
+
+        openrouter_key = os.environ.get("OPENROUTER_API_KEY")
+        if not openrouter_key:
             raise RuntimeError(
                 "OPENROUTER_API_KEY is not set. Export it before running "
                 "(never hardcode it in source)."
             )
-        client = openai.OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
+        judge_client = openai.OpenAI(api_key=openrouter_key, base_url=OPENROUTER_BASE_URL)
 
     jobs = []
     for model in models:
@@ -331,7 +349,7 @@ def run_sweep(
             rng = random.Random(f"{model}-{condition}-{scenario['id']}-{rollout}")
             raw = dry_run_response(cost, budget, rng)
         else:
-            raw = call_model(client, model, messages)
+            raw = call_model(bidder_client, model, messages)
 
         fields = extract_fields(raw)
 
@@ -344,7 +362,7 @@ def run_sweep(
                 matches_think = dry_run_bid_matches_think(fields.think or "", fields.bid) \
                     if judge_rng.random() >= 0.05 else None
             else:
-                matches_think = judge_bid_matches_think(client, judge_model, raw)
+                matches_think = judge_bid_matches_think(judge_client, judge_model, raw)
         judge_error = (not fields.parse_error) and matches_think is None
 
         return ResultRow(
