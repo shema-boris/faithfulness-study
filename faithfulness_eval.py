@@ -4,10 +4,14 @@ Faithfulness evaluation for LLM bidding agents.
 Measures whether a model's stated reasoning (**Think:**) matches what it
 actually does (**Bid:**). Pure inference -- no training, no RL.
 
-Bidder models are called via Hugging Face's Inference Providers (an
-OpenAI-compatible API, so no local download/GPU needed even for the
-larger models). The judge (grading whether Bid matches Think) is called
-via OpenRouter.
+Bidder models can be called two ways:
+  - via Hugging Face's Inference Providers (an OpenAI-compatible API, no
+    local download/GPU needed) -- the default.
+  - locally via transformers/torch (--local), one model at a time, useful
+    for sizes that are cheap/free to run on your own GPU (Colab Pro's A100
+    comfortably fits everything except ~72B in bf16, and 32B fits in 4-bit).
+The judge (grading whether Bid matches Think) is always called via
+OpenRouter, regardless of how the bidder is run.
 
 Current pass: log every response's Think/Bid/Reasoning, check bid validity
 with plain arithmetic on the parsed bid (cost <= bid <= budget -- no LLM
@@ -16,11 +20,16 @@ that asked a judge model to do it got ~5-12% of cases wrong), and check
 whether the submitted bid matches what Think said it would bid via a judge.
 
 Usage:
-    export HF_TOKEN=hf_...
     export OPENROUTER_API_KEY=sk-or-...
     python faithfulness_eval.py --dry-run                 # smoke test, no API calls
-    python faithfulness_eval.py --models Qwen/Qwen2.5-7B-Instruct
-    python faithfulness_eval.py                            # full sweep, all models/conditions
+
+    # via Hugging Face Inference Providers (needs HF_TOKEN too):
+    export HF_TOKEN=hf_...
+    python faithfulness_eval.py --models Qwen/Qwen2.5-72B-Instruct
+
+    # locally on your own GPU, one model at a time:
+    python faithfulness_eval.py --models Qwen/Qwen2.5-7B-Instruct --local
+    python faithfulness_eval.py --models Qwen/Qwen2.5-32B-Instruct --local --load-in-4bit
 """
 
 from __future__ import annotations
@@ -255,6 +264,54 @@ def call_model(client, model: str, messages: list[dict], max_retries: int = 5) -
     return chat_call(client, model, messages, temperature=0.7, max_tokens=300, max_retries=max_retries)
 
 
+def load_local_model(model_id: str, load_in_4bit: bool):
+    """Load a model + tokenizer from the Hugging Face Hub for local generation.
+    Public model weights, so no HF_TOKEN needed."""
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    print(f"  loading {model_id} locally{' (4-bit)' if load_in_4bit else ''}...", file=sys.stderr)
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+    kwargs = {"device_map": "auto"}
+    if load_in_4bit:
+        from transformers import BitsAndBytesConfig
+        kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16,
+        )
+    else:
+        kwargs["torch_dtype"] = torch.bfloat16
+
+    model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
+    return model, tokenizer
+
+
+def unload_local_model(model) -> None:
+    import gc
+    import torch
+    del model
+    gc.collect()
+    torch.cuda.empty_cache()
+
+
+def call_model_local(model, tokenizer, messages: list[dict],
+                      temperature: float = 0.7, max_new_tokens: int = 300) -> str:
+    import torch
+
+    prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    with torch.no_grad():
+        output = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            do_sample=temperature > 0,
+            pad_token_id=tokenizer.eos_token_id,
+        )
+    generated = output[0][inputs["input_ids"].shape[1]:]
+    return tokenizer.decode(generated, skip_special_tokens=True)
+
+
 def is_bid_valid(cost: float, budget: float, bid: Optional[float]) -> bool:
     return bid is not None and (cost - 1e-9) <= bid <= (budget + 1e-9)
 
@@ -310,18 +367,13 @@ def run_sweep(
     dry_run: bool,
     judge_model: str = JUDGE_MODEL,
     verbose: bool = False,
+    local: bool = False,
+    load_in_4bit: bool = False,
 ) -> list[ResultRow]:
     bidder_client = None
     judge_client = None
     if not dry_run:
         import openai
-
-        hf_token = os.environ.get("HF_TOKEN")
-        if not hf_token:
-            raise RuntimeError(
-                "HF_TOKEN is not set. Export it before running (never hardcode it in source)."
-            )
-        bidder_client = openai.OpenAI(api_key=hf_token, base_url=HF_BASE_URL)
 
         openrouter_key = os.environ.get("OPENROUTER_API_KEY")
         if not openrouter_key:
@@ -331,70 +383,101 @@ def run_sweep(
             )
         judge_client = openai.OpenAI(api_key=openrouter_key, base_url=OPENROUTER_BASE_URL)
 
-    jobs = []
-    for model in models:
-        for condition in conditions:
-            for scenario_idx, scenario in enumerate(scenarios):
-                for rollout in range(n_rollouts):
-                    jobs.append((model, condition, scenario_idx, scenario, rollout))
+        if not local:
+            hf_token = os.environ.get("HF_TOKEN")
+            if not hf_token:
+                raise RuntimeError(
+                    "HF_TOKEN is not set. Export it before running (never hardcode it in "
+                    "source), or pass --local to run models on your own GPU instead."
+                )
+            bidder_client = openai.OpenAI(api_key=hf_token, base_url=HF_BASE_URL)
 
     results: list[ResultRow] = []
 
-    def process(job):
-        model, condition, scenario_idx, scenario, rollout = job
-        cost, budget = scenario["cost"], scenario["budget"]
-        messages = build_messages(condition, scenario_idx, scenarios)
+    for model in models:
+        jobs = [
+            (model, condition, scenario_idx, scenario, rollout)
+            for condition in conditions
+            for scenario_idx, scenario in enumerate(scenarios)
+            for rollout in range(n_rollouts)
+        ]
 
-        if dry_run:
-            rng = random.Random(f"{model}-{condition}-{scenario['id']}-{rollout}")
-            raw = dry_run_response(cost, budget, rng)
-        else:
-            raw = call_model(bidder_client, model, messages)
+        local_model = local_tokenizer = None
+        if local and not dry_run:
+            local_model, local_tokenizer = load_local_model(model, load_in_4bit)
 
-        fields = extract_fields(raw)
+        def process(job):
+            model, condition, scenario_idx, scenario, rollout = job
+            cost, budget = scenario["cost"], scenario["budget"]
+            messages = build_messages(condition, scenario_idx, scenarios)
 
-        valid = is_bid_valid(cost, budget, fields.bid)
-
-        matches_think = None
-        if not fields.parse_error:
             if dry_run:
-                judge_rng = random.Random(f"judge-{model}-{condition}-{scenario['id']}-{rollout}")
-                matches_think = dry_run_bid_matches_think(fields.think or "", fields.bid) \
-                    if judge_rng.random() >= 0.05 else None
+                rng = random.Random(f"{model}-{condition}-{scenario['id']}-{rollout}")
+                raw = dry_run_response(cost, budget, rng)
+            elif local:
+                raw = call_model_local(local_model, local_tokenizer, messages)
             else:
-                matches_think = judge_bid_matches_think(judge_client, judge_model, raw)
-        judge_error = (not fields.parse_error) and matches_think is None
+                raw = call_model(bidder_client, model, messages)
 
-        return ResultRow(
-            model=model,
-            condition=condition,
-            scenario_id=scenario["id"],
-            rollout=rollout,
-            cost=cost,
-            budget=budget,
-            prompt=messages[1]["content"],
-            bid=fields.bid,
-            think=fields.think,
-            reasoning=fields.reasoning,
-            parse_error=fields.parse_error,
-            valid=valid,
-            bid_matches_think=matches_think,
-            judge_error=judge_error,
-            raw_response=raw,
-        )
+            fields = extract_fields(raw)
 
-    total = len(jobs)
-    done = 0
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(process, job): job for job in jobs}
-        for future in as_completed(futures):
-            row = future.result()
-            results.append(row)
-            done += 1
-            if verbose:
-                print(format_verbose_block(row))
-            if done % 10 == 0 or done == total:
-                print(f"  progress: {done}/{total}", file=sys.stderr)
+            valid = is_bid_valid(cost, budget, fields.bid)
+
+            matches_think = None
+            if not fields.parse_error:
+                if dry_run:
+                    judge_rng = random.Random(f"judge-{model}-{condition}-{scenario['id']}-{rollout}")
+                    matches_think = dry_run_bid_matches_think(fields.think or "", fields.bid) \
+                        if judge_rng.random() >= 0.05 else None
+                else:
+                    matches_think = judge_bid_matches_think(judge_client, judge_model, raw)
+            judge_error = (not fields.parse_error) and matches_think is None
+
+            return ResultRow(
+                model=model,
+                condition=condition,
+                scenario_id=scenario["id"],
+                rollout=rollout,
+                cost=cost,
+                budget=budget,
+                prompt=messages[1]["content"],
+                bid=fields.bid,
+                think=fields.think,
+                reasoning=fields.reasoning,
+                parse_error=fields.parse_error,
+                valid=valid,
+                bid_matches_think=matches_think,
+                judge_error=judge_error,
+                raw_response=raw,
+            )
+
+        total = len(jobs)
+        done = 0
+        if local and not dry_run:
+            # One GPU, one model resident at a time -- generate() calls run
+            # sequentially rather than through the thread pool used for API calls.
+            for job in jobs:
+                row = process(job)
+                results.append(row)
+                done += 1
+                if verbose:
+                    print(format_verbose_block(row))
+                if done % 10 == 0 or done == total:
+                    print(f"  progress: {done}/{total}", file=sys.stderr)
+        else:
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                futures = {pool.submit(process, job): job for job in jobs}
+                for future in as_completed(futures):
+                    row = future.result()
+                    results.append(row)
+                    done += 1
+                    if verbose:
+                        print(format_verbose_block(row))
+                    if done % 10 == 0 or done == total:
+                        print(f"  progress: {done}/{total}", file=sys.stderr)
+
+        if local_model is not None:
+            unload_local_model(local_model)
 
     return results
 
@@ -481,6 +564,11 @@ def main():
                          help="Skip real API calls; generate synthetic responses to test the pipeline")
     parser.add_argument("--verbose", action="store_true",
                          help="Print each response's Think/Bid/Reasoning and verdicts as it completes")
+    parser.add_argument("--local", action="store_true",
+                         help="Run the bidder model(s) locally via transformers instead of "
+                              "Hugging Face Inference Providers -- one model at a time")
+    parser.add_argument("--load-in-4bit", action="store_true",
+                         help="4-bit quantize the local model (bitsandbytes) -- only used with --local")
     args = parser.parse_args()
 
     models = [m.strip() for m in args.models.split(",") if m.strip()]
@@ -493,8 +581,9 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     total_calls = len(models) * len(conditions) * len(scenarios) * args.n_rollouts
-    print(f"Running {total_calls} bidder calls (+ up to {total_calls} judge calls to "
-          f"{args.judge_model}) across {len(models)} models x {len(conditions)} "
+    where = "locally" if args.local else "via Hugging Face"
+    print(f"Running {total_calls} bidder calls {where} (+ up to {total_calls} judge calls to "
+          f"{args.judge_model} via OpenRouter) across {len(models)} models x {len(conditions)} "
           f"conditions x {len(scenarios)} scenarios x {args.n_rollouts} rollouts"
           f"{' [DRY RUN]' if args.dry_run else ''}")
 
@@ -507,6 +596,8 @@ def main():
         dry_run=args.dry_run,
         judge_model=args.judge_model,
         verbose=args.verbose,
+        local=args.local,
+        load_in_4bit=args.load_in_4bit,
     )
 
     if not rows:
