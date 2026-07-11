@@ -483,11 +483,67 @@ def run_sweep(
 
 
 def write_raw_csv(rows: list[ResultRow], path: Path) -> None:
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(asdict(rows[0]).keys()) if rows else [])
-        writer.writeheader()
+    """Append to an existing raw_responses.csv so results accumulate across
+    separate model-per-model invocations (e.g. --local runs). Falls back to
+    overwriting if the existing file's schema doesn't match the current
+    ResultRow fields, rather than risking a misaligned/corrupted CSV."""
+    if not rows:
+        return
+
+    fieldnames = list(asdict(rows[0]).keys())
+    append = False
+    if path.exists():
+        with open(path, "r", newline="", encoding="utf-8") as f:
+            existing_header = next(csv.reader(f), None)
+        if existing_header == fieldnames:
+            append = True
+        else:
+            print(f"  [warn] {path} has a different/older schema -- starting a fresh file "
+                  f"instead of appending", file=sys.stderr)
+
+    mode = "a" if append else "w"
+    with open(path, mode, newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if not append:
+            writer.writeheader()
         for row in rows:
             writer.writerow(asdict(row))
+
+
+def read_raw_csv(path: Path) -> list[ResultRow]:
+    """Read back a raw_responses.csv written by write_raw_csv, reconstructing
+    typed ResultRow objects (CSV only stores strings) so summarize() can run
+    over the full accumulated dataset, not just the current run's rows."""
+    if not path.exists():
+        return []
+
+    def opt_bool(s: str) -> Optional[bool]:
+        return None if s == "" else s == "True"
+
+    def opt_float(s: str) -> Optional[float]:
+        return None if s == "" else float(s)
+
+    rows = []
+    with open(path, "r", newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            rows.append(ResultRow(
+                model=row["model"],
+                condition=row["condition"],
+                scenario_id=int(row["scenario_id"]),
+                rollout=int(row["rollout"]),
+                cost=float(row["cost"]),
+                budget=float(row["budget"]),
+                prompt=row["prompt"],
+                bid=opt_float(row["bid"]),
+                think=row["think"] or None,
+                reasoning=row["reasoning"] or None,
+                parse_error=row["parse_error"] == "True",
+                valid=row["valid"] == "True",
+                bid_matches_think=opt_bool(row["bid_matches_think"]),
+                judge_error=row["judge_error"] == "True",
+                raw_response=row["raw_response"],
+            ))
+    return rows
 
 
 def summarize(rows: list[ResultRow]) -> list[dict]:
@@ -604,8 +660,10 @@ def main():
         print("No results produced.", file=sys.stderr)
         sys.exit(1)
 
-    write_raw_csv(rows, out_dir / "raw_responses.csv")
-    summary = summarize(rows)
+    raw_path = out_dir / "raw_responses.csv"
+    write_raw_csv(rows, raw_path)
+    all_rows = read_raw_csv(raw_path)  # full accumulated dataset, not just this run
+    summary = summarize(all_rows)
     write_summary_csv(summary, out_dir / "faithfulness_results.csv")
 
     print()
