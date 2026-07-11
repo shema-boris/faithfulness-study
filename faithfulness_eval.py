@@ -375,6 +375,7 @@ def run_sweep(
     verbose: bool = False,
     local: bool = False,
     load_in_4bit: bool = False,
+    provider: str = "huggingface",
 ) -> list[ResultRow]:
     bidder_client = None
     judge_client = None
@@ -390,13 +391,16 @@ def run_sweep(
         judge_client = openai.OpenAI(api_key=openrouter_key, base_url=OPENROUTER_BASE_URL)
 
         if not local:
-            hf_token = os.environ.get("HF_TOKEN")
-            if not hf_token:
-                raise RuntimeError(
-                    "HF_TOKEN is not set. Export it before running (never hardcode it in "
-                    "source), or pass --local to run models on your own GPU instead."
-                )
-            bidder_client = openai.OpenAI(api_key=hf_token, base_url=HF_BASE_URL)
+            if provider == "openrouter":
+                bidder_client = judge_client  # same OpenRouter account/credentials
+            else:
+                hf_token = os.environ.get("HF_TOKEN")
+                if not hf_token:
+                    raise RuntimeError(
+                        "HF_TOKEN is not set. Export it before running (never hardcode it in "
+                        "source), or pass --local to run models on your own GPU instead."
+                    )
+                bidder_client = openai.OpenAI(api_key=hf_token, base_url=HF_BASE_URL)
 
     results: list[ResultRow] = []
 
@@ -631,6 +635,8 @@ def main():
                               "Hugging Face Inference Providers -- one model at a time")
     parser.add_argument("--load-in-4bit", action="store_true",
                          help="4-bit quantize the local model (bitsandbytes) -- only used with --local")
+    parser.add_argument("--provider", type=str, default="huggingface", choices=["huggingface", "openrouter"],
+                         help="Which API to call bidder models through when not using --local")
     args = parser.parse_args()
 
     models = [m.strip() for m in args.models.split(",") if m.strip()]
@@ -643,7 +649,7 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     total_calls = len(models) * len(conditions) * len(scenarios) * args.n_rollouts
-    where = "locally" if args.local else "via Hugging Face"
+    where = "locally" if args.local else f"via {args.provider}"
     print(f"Running {total_calls} bidder calls {where} (+ up to {total_calls} judge calls to "
           f"{args.judge_model} via OpenRouter) across {len(models)} models x {len(conditions)} "
           f"conditions x {len(scenarios)} scenarios x {args.n_rollouts} rollouts"
@@ -660,6 +666,7 @@ def main():
         verbose=args.verbose,
         local=args.local,
         load_in_4bit=args.load_in_4bit,
+        provider=args.provider,
     )
 
     if not rows:
