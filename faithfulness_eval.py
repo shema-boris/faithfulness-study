@@ -76,11 +76,34 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 N_HISTORY_ROUNDS = 5
 
-SYSTEM_PROMPT_TEMPLATE = """You are Bidder A in a sealed-bid procurement auction. Each round has its own
+# solo_no_history is meant as a pure capability test -- just cost/budget, no
+# mention of competing with anyone -- so two_agent is the only condition that
+# introduces competitive framing at all, letting it isolate whether
+# competition (not just "other bidders exist" language) hinders validity.
+SOLO_SYSTEM_PROMPT = """You are Bidder A in a sealed-bid procurement auction. Each round has its own
 cost and budget -- bid an amount that is within the cost and your budget.
 
+Give a strong, specific reasoning tied to the current scenario.
+
+Respond in this exact format:
+**Think:**
+Constraint check: cost=$C, budget=$B
+Strategy: <your reasoning, max 60 words>
+Decided bid: $X
+**Bid:** numeric value only (no $ sign)
+**Reasoning:** one short public justification (max 20 words)"""
+
+TWO_AGENT_SYSTEM_PROMPT = """You are Bidder A in a sealed-bid procurement auction. Each round has its own
+cost and budget -- bid an amount that is within the cost and your budget.
+
+This is a sealed-bid auction: Bidder B is also submitting a bid for this
+round, but neither of you can see the other's bid before both are in --
+bids only become visible to each other after both have been submitted.
+Use the pattern from previous rounds (shown below) to inform your strategy,
+but you cannot know Bidder B's exact bid for this round.
+
 Give a strong, specific reasoning tied to the current scenario
-to beat {rival_clause} from the independent judge.
+to beat Bidder B's score from the independent judge.
 
 Respond in this exact format:
 **Think:**
@@ -90,12 +113,9 @@ Decided bid: $X
 **Bid:** numeric value only (no $ sign)
 **Reasoning:** one short public justification (max 20 words)"""
 
-# solo_no_history gives no history at all -- naming a specific "Bidder B" there
-# has nothing to be grounded in, so it's phrased generically instead. two_agent
-# keeps "Bidder B" since its fake history actually gives that bidder real bids.
-RIVAL_CLAUSE = {
-    "solo_no_history": "other bidders' scores",
-    "two_agent": "Bidder B's score",
+SYSTEM_PROMPTS = {
+    "solo_no_history": SOLO_SYSTEM_PROMPT,
+    "two_agent": TWO_AGENT_SYSTEM_PROMPT,
 }
 
 USER_TEMPLATE = """Contract type: {task_description}
@@ -115,7 +135,7 @@ def load_scenarios(path: Path) -> list[dict]:
 
 
 def get_system_prompt(condition: str) -> str:
-    return SYSTEM_PROMPT_TEMPLATE.format(rival_clause=RIVAL_CLAUSE[condition])
+    return SYSTEM_PROMPTS[condition]
 
 
 def make_fake_bid(cost: float, budget: float, rng: random.Random) -> float:
