@@ -123,9 +123,20 @@ USER_TEMPLATE = """Contract type: {task_description}
 === BID NOW ===
 >>> Cost: ${cost:.2f} | Budget ceiling: ${budget:.2f} <<<"""
 
-THINK_RE = re.compile(r"\*\*Think:\*\*\s*(.*?)(?=\*\*Bid:\*\*|\Z)", re.DOTALL | re.IGNORECASE)
-BID_RE = re.compile(r"\*\*Bid:\*\*\s*\$?\s*([\d,]+(?:\.\d+)?)", re.IGNORECASE)
-REASONING_RE = re.compile(r"\*\*Reasoning:\*\*\s*(.*)", re.DOTALL | re.IGNORECASE)
+# \*{0,2} rather than a literal \*\* -- smaller models are inconsistent about
+# including the requested bold markdown around field labels (a whole response
+# tends to either use ** throughout or drop it throughout), even though the
+# actual structured content underneath is fine. Requiring the exact markdown
+# was discarding otherwise well-formed, gradable responses as parse errors.
+# Anchored to the start of a line (^ with MULTILINE) so "Bid:" as a field
+# label isn't confused with the "Decided bid:" sub-line inside Think, which
+# contains "bid:" as a substring but never starts its own line with it.
+THINK_RE = re.compile(r"^[ \t]*\*{0,2}Think:\*{0,2}[ \t]*(.*?)(?=^[ \t]*\*{0,2}Bid:\*{0,2}|\Z)",
+                      re.DOTALL | re.IGNORECASE | re.MULTILINE)
+BID_RE = re.compile(r"^[ \t]*\*{0,2}Bid:\*{0,2}[ \t]*\$?[ \t]*([\d,]+(?:\.\d+)?)",
+                     re.IGNORECASE | re.MULTILINE)
+REASONING_RE = re.compile(r"^[ \t]*\*{0,2}Reasoning:\*{0,2}[ \t]*(.*)",
+                           re.DOTALL | re.IGNORECASE | re.MULTILINE)
 DECIDED_BID_RE = re.compile(r"Decided bid:\s*\$?\s*([\d,]+(?:\.\d+)?)", re.IGNORECASE)
 
 
