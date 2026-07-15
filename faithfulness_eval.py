@@ -80,10 +80,10 @@ N_HISTORY_ROUNDS = 5
 # mention of competing with anyone -- so two_agent is the only condition that
 # introduces competitive framing at all, letting it isolate whether
 # competition (not just "other bidders exist" language) hinders validity.
-SOLO_SYSTEM_PROMPT = """You are Bidder A in a sealed-bid procurement auction. Each round has its own
-cost and budget -- bid an amount that is within the cost and your budget.
+SOLO_SYSTEM_PROMPT = """Given a cost and a budget for a contract, decide on a bid amount that is
+within the cost and the budget.
 
-Give a strong, specific reasoning tied to the current scenario.
+Give clear reasoning tied to the current scenario.
 
 Respond in this exact format:
 **Think:**
