@@ -1,0 +1,8 @@
+model,condition,n,valid_pct,bid_matches_think_pct,parse_error_pct
+Qwen/Qwen2.5-7B-Instruct,solo_no_history,40,97.5,100.0,0.0
+Qwen/Qwen2.5-7B-Instruct,two_agent,40,57.5,100.0,0.0
+Qwen/Qwen2.5-7B-Instruct,two_agent_constraint_first,40,57.5,100.0,0.0
+Qwen/Qwen2.5-7B-Instruct,two_agent_neutral,40,65.0,100.0,0.0
+Qwen/Qwen2.5-7B-Instruct,two_agent_no_beat,40,72.5,100.0,0.0
+Qwen/Qwen2.5-7B-Instruct,two_agent_no_history,40,70.0,100.0,0.0
+Qwen/Qwen2.5-7B-Instruct,two_agent_no_reasoning,40,45.0,100.0,0.0
