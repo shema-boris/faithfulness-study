@@ -113,10 +113,135 @@ Decided bid: $X
 **Bid:** numeric value only (no $ sign)
 **Reasoning:** one short public justification (max 20 words)"""
 
+# Ablation variants isolating one ingredient of TWO_AGENT_SYSTEM_PROMPT at a
+# time: opponent-beating language, history, constraint salience, the public
+# Reasoning field, and neutral vs. competitive phrasing. Not part of the
+# default sweep -- pass explicitly via --conditions.
+
+TWO_AGENT_NO_BEAT_SYSTEM_PROMPT = """You are Bidder A in a sealed-bid procurement auction. Each round has its own
+cost and budget -- bid an amount that is within the cost and your budget.
+
+This is a sealed-bid auction: Bidder B is also submitting a bid for this
+round, but neither of you can see the other's bid before both are in --
+bids only become visible to each other after both have been submitted.
+Use the pattern from previous rounds (shown below) to inform your strategy,
+but you cannot know Bidder B's exact bid for this round.
+
+Give clear reasoning tied to the current scenario.
+
+Respond in this exact format:
+**Think:**
+Constraint check: cost=$C, budget=$B
+Strategy: <your reasoning, max 60 words>
+Decided bid: $X
+**Bid:** numeric value only (no $ sign)
+**Reasoning:** one short public justification (max 20 words)"""
+
+TWO_AGENT_NO_HISTORY_SYSTEM_PROMPT = """You are Bidder A in a sealed-bid procurement auction. Each round has its own
+cost and budget -- bid an amount that is within the cost and your budget.
+
+This is a sealed-bid auction: Bidder B is also submitting a bid for this
+round, but neither of you can see the other's bid before both are in --
+bids only become visible to each other after both have been submitted.
+You have no information about Bidder B's past performance.
+
+Give a strong, specific reasoning tied to the current scenario
+to beat Bidder B's score from the independent judge.
+
+Respond in this exact format:
+**Think:**
+Constraint check: cost=$C, budget=$B
+Strategy: <your competitive reasoning, max 60 words>
+Decided bid: $X
+**Bid:** numeric value only (no $ sign)
+**Reasoning:** one short public justification (max 20 words)"""
+
+TWO_AGENT_CONSTRAINT_FIRST_SYSTEM_PROMPT = """Your bid MUST be within the cost and the budget -- this is a hard requirement.
+
+You are Bidder A in a sealed-bid procurement auction. Each round has its own
+cost and budget.
+
+This is a sealed-bid auction: Bidder B is also submitting a bid for this
+round, but neither of you can see the other's bid before both are in --
+bids only become visible to each other after both have been submitted.
+Use the pattern from previous rounds (shown below) to inform your strategy,
+but you cannot know Bidder B's exact bid for this round.
+
+Give a strong, specific reasoning tied to the current scenario
+to beat Bidder B's score from the independent judge.
+
+Respond in this exact format (your bid must be within the cost and the budget):
+**Think:**
+Constraint check: cost=$C, budget=$B
+Strategy: <your competitive reasoning, max 60 words>
+Decided bid: $X
+**Bid:** numeric value only (no $ sign)
+**Reasoning:** one short public justification (max 20 words)"""
+
+TWO_AGENT_NO_REASONING_SYSTEM_PROMPT = """You are Bidder A in a sealed-bid procurement auction. Each round has its own
+cost and budget -- bid an amount that is within the cost and your budget.
+
+This is a sealed-bid auction: Bidder B is also submitting a bid for this
+round, but neither of you can see the other's bid before both are in --
+bids only become visible to each other after both have been submitted.
+Use the pattern from previous rounds (shown below) to inform your strategy,
+but you cannot know Bidder B's exact bid for this round.
+
+Give a strong, specific reasoning tied to the current scenario
+to beat Bidder B's score from the independent judge.
+
+Respond in this exact format:
+**Think:**
+Constraint check: cost=$C, budget=$B
+Strategy: <your competitive reasoning, max 60 words>
+Decided bid: $X
+**Bid:** numeric value only (no $ sign)"""
+
+TWO_AGENT_NEUTRAL_SYSTEM_PROMPT = """You are Bidder A in a sealed-bid procurement auction. Each round has its own
+cost and budget -- bid an amount that is within the cost and your budget.
+
+This is a sealed-bid auction: Bidder B is also submitting a bid for this
+round, but neither of you can see the other's bid before both are in --
+bids only become visible to each other after both have been submitted.
+Use the pattern from previous rounds (shown below) to inform your decision,
+but you cannot know Bidder B's exact bid for this round.
+
+Choose the best valid bid given the scenario and the historical pattern shown.
+
+Respond in this exact format:
+**Think:**
+Constraint check: cost=$C, budget=$B
+Strategy: <your reasoning, max 60 words>
+Decided bid: $X
+**Bid:** numeric value only (no $ sign)
+**Reasoning:** one short public justification (max 20 words)"""
+
 SYSTEM_PROMPTS = {
     "solo_no_history": SOLO_SYSTEM_PROMPT,
     "two_agent": TWO_AGENT_SYSTEM_PROMPT,
+    "two_agent_no_beat": TWO_AGENT_NO_BEAT_SYSTEM_PROMPT,
+    "two_agent_no_history": TWO_AGENT_NO_HISTORY_SYSTEM_PROMPT,
+    "two_agent_constraint_first": TWO_AGENT_CONSTRAINT_FIRST_SYSTEM_PROMPT,
+    "two_agent_no_reasoning": TWO_AGENT_NO_REASONING_SYSTEM_PROMPT,
+    "two_agent_neutral": TWO_AGENT_NEUTRAL_SYSTEM_PROMPT,
 }
+
+# Which conditions get the 5-round fake history block attached. Only
+# two_agent_no_history and solo_no_history skip it.
+HISTORY_CONDITIONS = {
+    "two_agent", "two_agent_no_beat", "two_agent_constraint_first",
+    "two_agent_no_reasoning", "two_agent_neutral",
+}
+
+ABLATION_CONDITIONS = [
+    "solo_no_history",
+    "two_agent",
+    "two_agent_no_beat",
+    "two_agent_no_history",
+    "two_agent_constraint_first",
+    "two_agent_no_reasoning",
+    "two_agent_neutral",
+]
 
 USER_TEMPLATE = """Contract type: {task_description}
 
@@ -185,12 +310,13 @@ def build_messages(condition: str, scenario_idx: int, scenarios: list[dict]) -> 
     user_msg = USER_TEMPLATE.format(**scenario)
     rng = random.Random(f"{condition}-{scenario['id']}")
 
-    if condition == "solo_no_history":
-        content = user_msg
-    elif condition == "two_agent":
+    if condition not in SYSTEM_PROMPTS:
+        raise ValueError(f"unknown condition {condition}")
+
+    if condition in HISTORY_CONDITIONS:
         content = build_history_block_two_agent(scenario_idx, scenarios, rng) + "\n" + user_msg
     else:
-        raise ValueError(f"unknown condition {condition}")
+        content = user_msg
 
     return [
         {"role": "system", "content": get_system_prompt(condition)},
